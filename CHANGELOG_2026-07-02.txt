@@ -1,0 +1,70 @@
+================================================================================
+PAY CALCULATOR — CHANGELOG
+Date: 2026-07-02
+File changed: index.html
+================================================================================
+
+1. LIVE FLIGHTS — FILTERED ROWS NOW DISAPPEAR
+   - Changed the flights filter so rows that don't match the selected
+     From/To route are removed from the table entirely, instead of still
+     rendering un-highlighted.
+   - Summary stats (Matching Flights, Avg Cash Saving, Best Value/pt) now
+     reflect exactly the rows shown.
+
+2. CALCULATOR — $400,000 WARNING EXTENDED TO ALL AMOUNT TYPES
+   - The AMEX Qantas Business Rewards annual points-cap warning
+     (500,000 pts = $400,000 spend at 1.25 pts/$) previously appeared only
+     for Amount Type = "Annual Total".
+   - It now also appears when:
+       * Single Transaction  — amount is above $400,000
+       * Monthly Total       — amount x 12 is above $400,000
+       * Annual Total        — unchanged
+   - Applied the annual cap in the single/monthly branch of calcCardPts(),
+     and updated the warning message so it reads correctly for each amount
+     type (e.g. "Your monthly spend of $X x 12 = $Y/year exceeds this cap").
+   - Logic keys off each card's annual cap generally, not hard-coded to one
+     card.
+
+3. LIVE FLIGHTS — SORTABLE COLUMNS
+   - Every column header in the Live Flights table is now clickable.
+     First click sorts ascending; clicking the same header again toggles to
+     descending. A small up/down arrow marks the active column.
+   - Departure dates sort chronologically (not alphabetically) via a new
+     parser that handles the "MMM 'YY" format (e.g. "Nov '26", "Feb '27",
+     and the malformed "Mar'27").
+   - Sorting works for computed columns too (Fees, Total Cost, cents/pt,
+     etc.). Blank / "—" values always sort to the bottom regardless of
+     direction.
+
+4. LIVE FLIGHTS — "REFRESH DATA" BUTTON
+   - Added a "Refresh Data" button next to "Download as Excel" that forces a
+     fresh pull of flights.xlsx from the repository.
+   - The fetch now uses a cache-buster and no-store so a refresh always
+     retrieves the latest file rather than a cached copy (also improves the
+     initial page load).
+   NOTE: Flight data is loaded live from the GitHub repo
+   (payrick2310/internalcalcpaycomau/main/flights.xlsx), not the local
+   flights.xlsx. Refresh reflects updates made to the repo's copy.
+
+5. CALCULATOR — "BEST FLIGHT" NOW PREFERS FUTURE FLIGHTS
+   - "Best Flight with Their Earned Points" now prioritises flights that
+     depart furthest in the future, using highest cash value as a
+     tie-breaker (previously ranked purely by cash price).
+
+6. CALCULATOR — "SHOW ME ANOTHER!" BUTTON
+   - Added a "Show me another!" button to the "Best Flight with Their Earned
+     Points" section.
+   - Clicking it steps through the ranked list of affordable flights:
+     2nd best, then 3rd best, and so on, wrapping back to the best after the
+     last one.
+   - A counter shows the current position (e.g. "Showing 2 of 7 affordable
+     flights"). The button only appears when 2+ affordable flights exist, and
+     the view resets to the best flight whenever calculator inputs change.
+
+7. CALCULATOR — TARGET AIRLINE DEFAULT
+   - The "Target Airline / FF Program" dropdown now defaults to Singapore
+     Airlines (Singapore KrisFlyer) when available, instead of the first
+     alphabetical option. An existing user selection is still preserved when
+     switching cards.
+
+================================================================================

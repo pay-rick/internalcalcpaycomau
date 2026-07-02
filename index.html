@@ -390,6 +390,20 @@
     .afford-yes { background: var(--green-bg); color: var(--green); border: 1px solid #a7f3d0; }
     .afford-no  { background: var(--red-bg);   color: var(--red);   border: 1px solid #fecaca; }
     .afford-na  { background: var(--bg);        color: var(--muted); border: 1px solid var(--border); }
+    .another-btn {
+      background: var(--brand);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 8px 16px;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: filter 0.15s;
+    }
+    .another-btn:hover { filter: brightness(1.08); }
+    #ex-rank { font-size: 11px; color: var(--muted); }
 
     /* ─── HINT BOX ───────────────────────────── */
     .hint {
@@ -542,6 +556,10 @@
       top: 0;
     }
     thead th.num { text-align: right; }
+    /* Sortable flight-table headers */
+    #flights-thead th { cursor: pointer; user-select: none; }
+    #flights-thead th:hover { background: #eef1f6; color: var(--text); }
+    #flights-thead th .sort-ind { font-size: 9px; color: var(--brand); }
     td {
       padding: 9px 8px;
       border-bottom: 1px solid var(--border);
@@ -661,6 +679,7 @@
   <button class="tab-btn active" onclick="switchTab('calc', this)">Calculator</button>
   <button class="tab-btn" onclick="switchTab('flights', this)">Live Flights</button>
   <button class="tab-btn" onclick="switchTab('cards-ref', this)">Cards Reference</button>
+  <button class="dl-btn" onclick="refreshFlightData(this)">⟳ Refresh Data</button>
   <button class="dl-btn" onclick="showDownloadWarning()">⬇ Download as Excel</button>
 </div>
 
@@ -839,6 +858,10 @@
           <div class="fstat-lbl">Est. Saving (After Tax)</div>
           <div class="fstat-val green" id="ex-saving">—</div>
         </div>
+      </div>
+      <div id="ex-another-row" style="display:none;align-items:center;gap:12px;margin-top:16px;">
+        <button class="another-btn" onclick="showAnotherFlight()">Show me another! →</button>
+        <span id="ex-rank"></span>
       </div>
     </div>
 
@@ -1054,24 +1077,24 @@
           <col class="c-md">
           <col class="c-cpp">
         </colgroup>
-        <thead>
+        <thead id="flights-thead">
           <tr>
-            <th>#</th>
-            <th>From</th>
-            <th>To</th>
-            <th>Airline</th>
-            <th>Class</th>
-            <th>Departs</th>
-            <th class="num">FF Pts</th>
-            <th class="num">Taxes</th>
-            <th class="num">Cash Price</th>
-            <th class="num">PRP Req.</th>
-            <th class="num">Spend to Earn</th>
-            <th class="num">Fees</th>
-            <th class="num">Total Cost</th>
-            <th class="num">-25% Tax</th>
-            <th class="num">Cash Saving</th>
-            <th class="num">¢/pt</th>
+            <th onclick="sortFlights(0)">#<span class="sort-ind"></span></th>
+            <th onclick="sortFlights(1)">From<span class="sort-ind"></span></th>
+            <th onclick="sortFlights(2)">To<span class="sort-ind"></span></th>
+            <th onclick="sortFlights(3)">Airline<span class="sort-ind"></span></th>
+            <th onclick="sortFlights(4)">Class<span class="sort-ind"></span></th>
+            <th onclick="sortFlights(5)">Departs<span class="sort-ind"></span></th>
+            <th class="num" onclick="sortFlights(6)">FF Pts<span class="sort-ind"></span></th>
+            <th class="num" onclick="sortFlights(7)">Taxes<span class="sort-ind"></span></th>
+            <th class="num" onclick="sortFlights(8)">Cash Price<span class="sort-ind"></span></th>
+            <th class="num" onclick="sortFlights(9)">PRP Req.<span class="sort-ind"></span></th>
+            <th class="num" onclick="sortFlights(10)">Spend to Earn<span class="sort-ind"></span></th>
+            <th class="num" onclick="sortFlights(11)">Fees<span class="sort-ind"></span></th>
+            <th class="num" onclick="sortFlights(12)">Total Cost<span class="sort-ind"></span></th>
+            <th class="num" onclick="sortFlights(13)">-25% Tax<span class="sort-ind"></span></th>
+            <th class="num" onclick="sortFlights(14)">Cash Saving<span class="sort-ind"></span></th>
+            <th class="num" onclick="sortFlights(15)">¢/pt<span class="sort-ind"></span></th>
           </tr>
         </thead>
         <tbody id="flights-tbody"></tbody>
@@ -1830,6 +1853,17 @@ function calcCardPts(card, amount, txnType) {
         return {pts, capHit:true, capType:'monthly', cap:card.monthlyCap, postRate:pmc};
       }
     }
+    // Annual cap ceiling: single transaction compared directly; monthly compared on an
+    // annualised (× 12) basis. Points are returned on the same per-txn / per-month basis.
+    if (card.annualCap != null) {
+      const annualCapSpend  = card.annualCap / base;
+      const annualisedSpend = txnType === 'monthly' ? amount * 12 : amount;
+      if (annualisedSpend > annualCapSpend) {
+        const annualPts = card.annualCap + (annualisedSpend - annualCapSpend) * pac;
+        const pts = txnType === 'monthly' ? annualPts / 12 : annualPts;
+        return {pts, capHit:true, capType:'annual', cap:card.annualCap, postRate:pac};
+      }
+    }
     return {pts: amount * base, capHit:false, capType:null, cap:null, postRate:null};
   }
 
@@ -1942,13 +1976,18 @@ function rebuildPartnerDropdown(card) {
     options = card.partners.map(p => p.a);
   }
 
+  let matched = false;
   options.forEach(name => {
     const opt = document.createElement('option');
     opt.value = name; opt.textContent = name;
-    if (name === prev) opt.selected = true;
+    if (name === prev) { opt.selected = true; matched = true; }
     sel.appendChild(opt);
   });
-  if (!sel.value && options.length) sel.value = options[0];
+  // With no prior selection to preserve, default to Singapore Airlines when available.
+  if (!matched && options.length) {
+    const preferred = 'Singapore KrisFlyer';
+    sel.value = options.includes(preferred) ? preferred : options[0];
+  }
 }
 
 function onCardChange() {
@@ -2043,15 +2082,22 @@ function renderCapAlert(s1) {
       Estimated monthly points: <strong>${fmtPts(monthlyPts)}</strong> → annualised total: <strong>${fmtPts(s1.cardPts)}</strong>.`;
 
   } else if (s1.capType === 'annual') {
-    // Pure annual cap (no monthly cap triggered, or monthly cap already applied and annual is the hard ceiling)
-    const capSpend  = s1.cap / base;
-    const extraPts  = s1.postRate > 0 ? (s1.amount - capSpend) * s1.postRate : 0;
+    // Pure annual cap. Compared against annualised spend: single txn directly,
+    // monthly spend × 12, annual spend as-is.
+    const capSpend        = s1.cap / base;
+    const annualisedSpend = s1.txnType === 'monthly' ? s1.amount * 12 : s1.amount;
+    const extraPts        = s1.postRate > 0 ? (annualisedSpend - capSpend) * s1.postRate : 0;
+    const spendLabel      = s1.txnType === 'single'
+      ? `Your single transaction of <strong>${fmtAUD(s1.amount)}</strong> exceeds this cap.`
+      : s1.txnType === 'monthly'
+        ? `Your monthly spend of <strong>${fmtAUD(s1.amount)}</strong> × 12 = <strong>${fmtAUD(annualisedSpend)}/year</strong> exceeds this cap.`
+        : `Your annual spend of <strong>${fmtAUD(s1.amount)}</strong> exceeds this cap.`;
     const rateNote  = s1.postRate > 0
-      ? `Remaining spend of <strong>${fmtAUD(s1.amount - capSpend)}</strong> earns at <strong>${s1.postRate} pts/$1</strong>, adding <strong>${fmtPts(extraPts)} pts</strong>.`
+      ? `Remaining spend of <strong>${fmtAUD(annualisedSpend - capSpend)}</strong> earns at <strong>${s1.postRate} pts/$1</strong>, adding <strong>${fmtPts(extraPts)} pts</strong>.`
       : `No additional points are earned beyond the annual cap.`;
     msg = `<div class="cap-title">⚠ Annual Points Cap Applied</div>
-      This card caps earn at <strong>${fmtPts(s1.cap)} points per year</strong> (hit at <strong>${fmtAUD(capSpend)}</strong> spend).
-      Your annual spend of <strong>${fmtAUD(s1.amount)}</strong> exceeds this cap.
+      This card caps earn at <strong>${fmtPts(s1.cap)} points per year</strong> (hit at <strong>${fmtAUD(capSpend)}</strong> annual spend).
+      ${spendLabel}
       ${rateNote}
       Total card points earned: <strong>${fmtPts(s1.cardPts)}</strong>.`;
   }
@@ -2300,14 +2346,40 @@ function calcFlightRow(f, planFeeRate, prpBoosterRate, prpPerDollar, card) {
 // ════════════════════════════════════════
 // BEST AFFORDABLE FLIGHT
 // ════════════════════════════════════════
+// Ranked list of affordable flights + which one is currently shown. "Show me another!"
+// steps through this list (2nd best, 3rd best, …) wrapping back to the best at the end.
+let bestFlightList = [];
+let bestFlightIdx  = 0;
+let bestFlightS1   = null;
+
 function updateBestFlight(s1) {
+  bestFlightS1 = s1;
+
   // Match flights where the airline maps to the target airline program
   const affordable = FLIGHTS.filter(f => {
     const ffProg = FLIGHT_AIRLINE_TO_FF[f.airline];
     return ffProg === s1.targetAirline && f.ff <= s1.totalFF;
   });
 
-  if (!affordable.length) {
+  // Prioritise flights that depart furthest in the future; tie-break on highest cash value.
+  affordable.sort((a, b) => {
+    const da = parseDepValue(a.dep), db = parseDepValue(b.dep);
+    const va = da == null ? -Infinity : da;
+    const vb = db == null ? -Infinity : db;
+    if (vb !== va) return vb - va;
+    return b.cash - a.cash;
+  });
+
+  bestFlightList = affordable;
+  bestFlightIdx  = 0;      // recompute always resets to the best flight
+  renderBestFlight();
+}
+
+function renderBestFlight() {
+  const s1 = bestFlightS1;
+  const anotherRow = document.getElementById('ex-another-row');
+
+  if (!bestFlightList.length) {
     set('ex-route',   'No matching flight available');
     set('ex-airline', s1.targetAirline || '—');
     set('ex-dep',     '—');
@@ -2317,11 +2389,11 @@ function updateBestFlight(s1) {
     set('ex-yourPts', fmtPts(s1.totalFF));
     set('ex-saving',  '—');
     setH('ex-status', '<span class="afford-pill afford-no">Earn more points</span>');
+    if (anotherRow) anotherRow.style.display = 'none';
     return;
   }
 
-  affordable.sort((a, b) => b.cash - a.cash);
-  const f    = affordable[0];
+  const f    = bestFlightList[bestFlightIdx];
   const calc = calcFlightRow(f, s1.planFeeRate, s1.prpBoosterRate, s1.prpPerDollar, s1.card);
 
   set('ex-route',   `${f.from} to ${f.to}`);
@@ -2333,6 +2405,21 @@ function updateBestFlight(s1) {
   set('ex-yourPts', fmtPts(s1.totalFF));
   set('ex-saving',  calc.saving != null ? fmtAUD2(calc.saving) : '—');
   setH('ex-status', '<span class="afford-pill afford-yes">They can book this</span>');
+
+  if (anotherRow) {
+    if (bestFlightList.length > 1) {
+      anotherRow.style.display = 'flex';
+      set('ex-rank', `Showing ${bestFlightIdx + 1} of ${bestFlightList.length} affordable flights`);
+    } else {
+      anotherRow.style.display = 'none';
+    }
+  }
+}
+
+function showAnotherFlight() {
+  if (bestFlightList.length < 2) return;
+  bestFlightIdx = (bestFlightIdx + 1) % bestFlightList.length;
+  renderBestFlight();
 }
 
 // ════════════════════════════════════════
@@ -2402,6 +2489,66 @@ function calculate() {
 // ════════════════════════════════════════
 // LIVE FLIGHTS
 // ════════════════════════════════════════
+
+// Parse a "Departs" value like "Nov '26" or "Mar'27" into a sortable integer
+// (year*12 + monthIndex). Returns null for anything unparseable so those rows sort last.
+const DEP_MONTHS = { jan:0, feb:1, mar:2, apr:3, may:4, jun:5, jul:6, aug:7, sep:8, oct:9, nov:10, dec:11 };
+function parseDepValue(dep) {
+  if (!dep) return null;
+  const m = String(dep).toLowerCase().match(/([a-z]{3})[a-z]*\s*'?\s*(\d{2,4})/);
+  if (!m) return null;
+  const mo = DEP_MONTHS[m[1]];
+  if (mo == null) return null;
+  let yr = parseInt(m[2], 10);
+  if (yr < 100) yr += 2000;
+  return yr * 12 + mo;
+}
+
+// Sort state for the flights table. col = column index (null = original order), dir = 1 asc / -1 desc.
+let flightSort = { col: null, dir: 1 };
+
+function sortFlights(col) {
+  if (flightSort.col === col) {
+    flightSort.dir = -flightSort.dir;
+  } else {
+    flightSort.col = col;
+    flightSort.dir = 1;
+  }
+  renderFlights();
+}
+
+// Value used to sort each row for a given column index (mirrors the rendered columns).
+function flightSortValue(col, f, calc) {
+  switch (col) {
+    case 0:  return f.id;
+    case 1:  return f.from;
+    case 2:  return f.to;
+    case 3:  return f.airline;
+    case 4:  return f.cls;
+    case 5:  return parseDepValue(f.dep);
+    case 6:  return f.ff;
+    case 7:  return f.taxes;
+    case 8:  return f.cash;
+    case 9:  return calc.prpRequired;
+    case 10: return calc.spend;
+    case 11: return calc.fees;
+    case 12: return calc.totalCost;
+    case 13: return calc.costAfterTax;
+    case 14: return calc.saving;
+    case 15: return calc.cpp;
+    default: return null;
+  }
+}
+
+function updateSortIndicators() {
+  const ths = document.querySelectorAll('#flights-thead th');
+  ths.forEach((th, i) => {
+    const ind = th.querySelector('.sort-ind');
+    if (!ind) return;
+    ind.textContent = flightSort.col === i ? (flightSort.dir === 1 ? ' ▲' : ' ▼') : '';
+  });
+}
+
 function renderFlights() {
   const fromF        = document.getElementById('lf-from').value;
   const toF          = document.getElementById('lf-to').value;
@@ -2427,22 +2574,46 @@ function renderFlights() {
 
   let matchCount = 0, matchSavings = [], bestCPP = null;
 
+  // Collect rows that pass the filters (stats are filter-based, independent of sort order).
+  const rows = [];
   FLIGHTS.forEach(f => {
     const isMatch = (!fromF || f.from === fromF) && (!toF || f.to === toF);
-    const calc    = calcFlightRow(f, planFeeRate, prpBoosterRate, prpPerDollar, card);
-    const rowCls  = cppRowClass(calc.cpp);
+    if (!isMatch) return;
+
+    const calc   = calcFlightRow(f, planFeeRate, prpBoosterRate, prpPerDollar, card);
+    const rowCls = cppRowClass(calc.cpp);
 
     if (ratingFilter && rowCls !== ratingFilter) return;
 
-    if (isMatch) {
-      matchCount++;
-      if (calc.saving != null) matchSavings.push(calc.saving);
-      if (calc.cpp > 0 && (bestCPP == null || calc.cpp > bestCPP)) bestCPP = calc.cpp;
-    }
+    matchCount++;
+    if (calc.saving != null) matchSavings.push(calc.saving);
+    if (calc.cpp > 0 && (bestCPP == null || calc.cpp > bestCPP)) bestCPP = calc.cpp;
 
+    rows.push({ f, calc, rowCls });
+  });
+
+  // Apply the active column sort (null/NaN values always sort to the bottom).
+  if (flightSort.col != null) {
+    const dir = flightSort.dir;
+    rows.sort((ra, rb) => {
+      const va = flightSortValue(flightSort.col, ra.f, ra.calc);
+      const vb = flightSortValue(flightSort.col, rb.f, rb.calc);
+      const na = va == null || (typeof va === 'number' && isNaN(va));
+      const nb = vb == null || (typeof vb === 'number' && isNaN(vb));
+      if (na && nb) return 0;
+      if (na) return 1;
+      if (nb) return -1;
+      const cmp = (typeof va === 'number' && typeof vb === 'number')
+        ? va - vb
+        : String(va).localeCompare(String(vb));
+      return cmp * dir;
+    });
+  }
+
+  rows.forEach(({ f, calc, rowCls }) => {
     const tr = document.createElement('tr');
     if (rowCls) tr.classList.add(rowCls);
-    if (isMatch) tr.classList.add('row-match');
+    tr.classList.add('row-match');
 
     const svHtml = calc.saving != null
       ? `<span class="sv-pos">${fmtAUD2(calc.saving)}</span>`
@@ -2468,6 +2639,8 @@ function renderFlights() {
     `;
     tbody.appendChild(tr);
   });
+
+  updateSortIndicators();
 
   set('lf-count', matchCount.toString());
   if (matchSavings.length > 0) {
@@ -2527,7 +2700,8 @@ async function loadFlightsFromGitHub() {
   const statusEl = document.getElementById('ds-status');
   try {
     statusEl.innerHTML = '<span class="ds-warn">Fetching flight data from repository…</span>';
-    const response = await fetch(url);
+    // Cache-buster + no-store so a manual refresh always pulls the latest flights.xlsx.
+    const response = await fetch(url + '?t=' + Date.now(), { cache: 'no-store' });
     if (!response.ok) throw new Error('Fetch failed — HTTP ' + response.status);
     statusEl.innerHTML = '<span class="ds-warn">Parsing Excel file…</span>';
     const arrayBuffer = await response.arrayBuffer();
@@ -2554,6 +2728,17 @@ async function loadFlightsFromGitHub() {
   } catch (err) {
     statusEl.innerHTML = `<span class="ds-err">&#9888; ${err.message}</span>`;
     console.error('loadFlightsFromGitHub:', err);
+  }
+}
+
+// Force a fresh pull of flights.xlsx from the repository (bypasses cache).
+async function refreshFlightData(btn) {
+  const original = btn ? btn.textContent : null;
+  if (btn) { btn.disabled = true; btn.textContent = '⟳ Refreshing…'; }
+  try {
+    await loadFlightsFromGitHub();
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = original; }
   }
 }
 
